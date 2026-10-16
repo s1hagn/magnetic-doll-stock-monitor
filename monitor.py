@@ -5,7 +5,7 @@ import re
 import smtplib
 import ssl
 import time
-import urllib.request
+from playwright.sync_api import sync_playwright
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from html.parser import HTMLParser
@@ -50,38 +50,37 @@ class OptionParser(HTMLParser):
 
 
 def fetch_stock():
-    for attempt in range(3):
+    # SMTOWN's stock labels are populated by JavaScript after the initial HTML response.
+    # Inspect the rendered DOM, not the static HTML returned by urllib.
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
         try:
-            req = urllib.request.Request(URL, headers={
-                "User-Agent": "Mozilla/5.0 (compatible; RIIZEStockMonitor/1.0)",
-                "Accept": "text/html,application/xhtml+xml",
-                "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
-                "Cache-Control": "no-cache",
-            })
-            with urllib.request.urlopen(req, timeout=30) as response:
-                if response.status != 200:
-                    raise ValueError("Inventory page HTTP status not 200")
-                encoding = response.headers.get_content_charset() or "utf-8"
-                html = response.read().decode(encoding, errors="replace")
+            page = browser.new_page(
+                locale="ko-KR",
+                user_agent=("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                            "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"),
+            )
+            page.goto(URL, wait_until="domcontentloaded", timeout=45000)
+            page.locator('option[value="SHOTARO"]').first.wait_for(timeout=25000)
+            # Allow asynchronous options/stock scripts to populate the labels.
+            page.wait_for_timeout(9000)
+            html = page.content()
             if "MAGNETIC DOLL" not in html.upper():
                 raise ValueError("Unexpected product page")
             parser = OptionParser()
             parser.feed(html)
             if set(parser.options) != set(MEMBERS):
                 raise ValueError("Expected six member choices, found: " + repr(sorted(parser.options)))
-            # A plain option label alone is NOT proof of purchasability.
-            # The retailer may populate SOLD OUT labels with client-side JavaScript;
-            # the server response can omit that information entirely.
-            print("Raw option labels (diagnostic):")
+            print("Rendered option labels (after JavaScript):")
             for member in MEMBERS:
                 print(member + ": " + repr(parser.labels[member][:150]))
+            # Conservative rule: all six bare names could mean JavaScript was blocked.
+            # Never generate a false 'everyone restocked' alert from that response.
             if not any(SOLD_OUT.search(label) for label in parser.labels.values()):
-                raise ValueError("Unverified inventory: no explicit sold-out markers in source HTML; refusing potential false restock alert")
+                raise ValueError("All rendered labels lack stock indicators; cannot verify availability reliably")
             return parser.options
-        except Exception:
-            if attempt == 2:
-                raise
-            time.sleep(2 ** attempt)
+        finally:
+            browser.close()
 
 
 def send_mail(subject, body):
