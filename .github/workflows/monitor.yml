@@ -2,17 +2,18 @@ name: RIIZE magnetic doll restock alert
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Run one inventory check, an inspection, or a test email'
+        description: 'One check, inspection, test email, or 12-check hourly watch'
         type: choice
         default: inspect
         options:
           - inspect
           - test-email
           - check
+          - watch
 
 permissions:
   contents: write
@@ -24,7 +25,7 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 65
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,21 +34,49 @@ jobs:
         run: |
           python3 -m pip install --disable-pip-version-check playwright==1.56.0
           python3 -m playwright install --with-deps chromium
-      - name: Check six members once
+      - name: Check six members on a five-minute cadence
         env:
-          MODE: ${{ github.event_name == 'schedule' && 'check' || inputs.mode || 'inspect' }}
+          RUN_MODE: ${{ github.event_name == 'schedule' && 'watch' || inputs.mode || 'inspect' }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           ALERT_TO: siya2026z@gmail.com
         shell: bash
         run: |
-          python3 monitor.py
-          if [[ "$MODE" == "check" && -f stock-state.json ]]; then
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add stock-state.json
-            if ! git diff --cached --quiet; then
-              git commit -m 'Update magnetic doll stock status'
-              git push origin HEAD:main
-            fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          rounds=1
+          mode="$RUN_MODE"
+          if [[ "$RUN_MODE" == "watch" ]]; then
+            rounds=12
+            mode=check
           fi
+
+          failed=0
+          for ((i=1; i<=rounds; i++)); do
+            started=$SECONDS
+            echo "Inventory check $i/$rounds; mode=$mode"
+            if MODE="$mode" python3 monitor.py; then
+              if [[ "$mode" == "check" && -f stock-state.json ]]; then
+                git add stock-state.json
+                if ! git diff --cached --quiet; then
+                  if git commit -m 'Update magnetic doll stock status' && git push origin HEAD:main; then
+                    echo 'Stock state persisted.'
+                  else
+                    echo '::error::Unable to persist stock state.'
+                    failed=1
+                  fi
+                fi
+              fi
+            else
+              echo '::warning::Inventory check failed; saved state unchanged. Continuing remaining checks.'
+              failed=1
+            fi
+
+            if (( i < rounds )); then
+              elapsed=$((SECONDS - started))
+              remaining=$((300 - elapsed))
+              if (( remaining > 0 )); then sleep "$remaining"; fi
+            fi
+          done
+          exit "$failed"
