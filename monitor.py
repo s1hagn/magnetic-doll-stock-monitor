@@ -24,6 +24,7 @@ class OptionParser(HTMLParser):
         self.value = ""
         self.parts = []
         self.options = {}
+        self.labels = {}
 
     def handle_starttag(self, tag, attrs):
         if tag.lower() == "option":
@@ -43,6 +44,7 @@ class OptionParser(HTMLParser):
                     raise ValueError("Duplicate member option: " + self.value)
                 if self.value not in label.upper():
                     raise ValueError("Unexpected member option label: " + self.value)
+                self.labels[self.value] = label
                 self.options[self.value] = not bool(SOLD_OUT.search(label))
             self.in_option = False
 
@@ -67,6 +69,14 @@ def fetch_stock():
             parser.feed(html)
             if set(parser.options) != set(MEMBERS):
                 raise ValueError("Expected six member choices, found: " + repr(sorted(parser.options)))
+            # A plain option label alone is NOT proof of purchasability.
+            # The retailer may populate SOLD OUT labels with client-side JavaScript;
+            # the server response can omit that information entirely.
+            print("Raw option labels (diagnostic):")
+            for member in MEMBERS:
+                print(member + ": " + repr(parser.labels[member][:150]))
+            if not any(SOLD_OUT.search(label) for label in parser.labels.values()):
+                raise ValueError("Unverified inventory: no explicit sold-out markers in source HTML; refusing potential false restock alert")
             return parser.options
         except Exception:
             if attempt == 2:
