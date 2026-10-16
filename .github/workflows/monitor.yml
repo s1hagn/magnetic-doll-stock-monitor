@@ -6,19 +6,16 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'bootstrap starts ongoing checks; watch continues them'
+        description: 'Run one inventory check, an inspection, or a test email'
         type: choice
-        default: bootstrap
+        default: inspect
         options:
-          - bootstrap
-          - watch
-          - check
           - inspect
           - test-email
+          - check
 
 permissions:
   contents: write
-  actions: write
 
 concurrency:
   group: riize-magnetic-doll-monitor
@@ -27,7 +24,7 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 65
+    timeout-minutes: 4
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,57 +33,21 @@ jobs:
         run: |
           python3 -m pip install --disable-pip-version-check playwright==1.56.0
           python3 -m playwright install --with-deps chromium
-      - name: Check six members
+      - name: Check six members once
         env:
-          RUN_MODE: ${{ inputs.mode || 'watch' }}
+          MODE: ${{ github.event_name == 'schedule' && 'check' || inputs.mode || 'inspect' }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           ALERT_TO: siya2026z@gmail.com
         shell: bash
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          rounds=1
-          mode="$RUN_MODE"
-          if [[ "$RUN_MODE" == "watch" ]]; then rounds=12; mode=check; fi
-          if [[ "$RUN_MODE" == "bootstrap" ]]; then mode=check; fi
-          failed=0
-          for ((i=1; i<=rounds; i++)); do
-            started=$SECONDS
-            echo "Inventory check $i/$rounds"
-            if MODE="$mode" python3 monitor.py; then
-              if [[ "$mode" == "check" && -f stock-state.json ]]; then
-                git add stock-state.json
-                if ! git diff --cached --quiet; then
-                  git commit -m 'Update magnetic doll stock status'
-                  if ! git push origin HEAD:main; then
-                    echo '::error::Unable to persist stock state.'
-                    failed=1
-                  fi
-                fi
-              fi
-            else
-              failed=1
-              echo '::warning::Inventory check failed; next check will retry.'
+          python3 monitor.py
+          if [[ "$MODE" == "check" && -f stock-state.json ]]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add stock-state.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Update magnetic doll stock status'
+              git push origin HEAD:main
             fi
-            if (( i < rounds )); then
-              remaining=$((300 - SECONDS + started))
-              if (( remaining > 0 )); then sleep "$remaining"; fi
-            fi
-          done
-          exit "$failed"
-      - name: Dispatch next monitoring session
-        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.mode == 'watch' || inputs.mode == 'bootstrap') }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          for attempt in 1 2 3; do
-            if gh workflow run monitor.yml --ref main -f mode=watch; then
-              echo 'Next monitoring session dispatched.'
-              exit 0
-            fi
-            sleep 10
-          done
-          echo '::error::Unable to dispatch next run; cron remains as fallback.'
-          exit 1
+          fi
