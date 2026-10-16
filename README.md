@@ -1,0 +1,1 @@
+# magnetic-doll-stock-monitor
