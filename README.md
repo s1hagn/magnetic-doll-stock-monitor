@@ -12,7 +12,7 @@
 
 这是新仓库，GitHub Secrets **不会从 NMIXX 仓库自动复制**。收件邮箱已经在 workflow 中固定为 `siya2026z@gmail.com`。
 
-然后到 **Actions → RIIZE magnetic doll restock alert → Run workflow**，先选 `inspect` 测试页面解析，再选 `test-email` 测试邮件，最后选 `bootstrap` 开始监控。也可以直接运行 `bootstrap`。`watch` 会连续做 12 次检查并派发下一轮；`check` 只做一次正式检查。
+GitHub Actions 已配置 `*/5 * * * *`，自动定时运行 **一次正式检查**（`check`），无需手动启动 `bootstrap`。手动运行可以选择 `inspect`（仅查看库存）、`test-email`（测试 SMTP）或 `check`（正式检查一次）。旧版 `bootstrap` / `watch` 已移除；旧版长时间运行任务需要等待结束或手动取消。
 
 ## 注意
 - 渲染后的选项文字中出现 SOLD OUT 时标为售罄；若六位全部没有明确的售罄标记，则暂时保守报错而不是假报全员补货。缺少任何一个选项、网页异常或页面格式变化时也会失败并保留原有状态。此方法仍需要通过 inspect 实际验证。
@@ -20,4 +20,4 @@
 - 通过 `stock-state.json` 保存上次状态；如邮件已发送但状态 Git 提交失败，可能出现重复提醒。
 - 在 Actions 中查看运行记录。没有补货邮件不代表任务一定正常。
 - 停止监控时禁用 workflow，并取消正在运行的任务。
-- 免费 GitHub-hosted Actions 运行额度、并发和续跑可能影响实际监控。大量长时间运行任务请关注仓库 Actions 使用额度。
+- 每次任务只检查一次，不再采用持续约 1 小时的长任务或自动续跑链。GitHub cron 的执行可能延迟、跳过或在仓库长时间无活动后停用；请定期查看 Actions。\n- `concurrency` 防止多轮库存检查同时写入状态；极少数拥堵情况下旧的排队任务仍可能被新任务替换。
