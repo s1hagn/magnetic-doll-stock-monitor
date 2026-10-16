@@ -60,16 +60,23 @@ def fetch_stock():
                 user_agent=("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
                             "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"),
             )
-            page.goto(URL, wait_until="domcontentloaded", timeout=45000)
-            page.locator('option[value="SHOTARO"]').first.wait_for(timeout=25000)
-            # Allow asynchronous options/stock scripts to populate the labels.
-            page.wait_for_timeout(9000)
+            response = page.goto(URL, wait_until="domcontentloaded", timeout=45000)
+            print("Browser response:", response.status if response else "none", flush=True)
+            print("Browser URL:", page.url, flush=True)
+            print("Page title:", page.title(), flush=True)
+            # Do not wait for a specific option: a missing selector must produce
+            # useful diagnostics instead of a blind 25-second timeout.
+            page.wait_for_timeout(10000)
+            print("Rendered option count:", page.locator("option").count(), flush=True)
+            print("Number of frames:", len(page.frames), flush=True)
+            print("Visible text excerpt:", repr(page.locator("body").inner_text(timeout=5000)[:650]), flush=True)
             html = page.content()
             if "MAGNETIC DOLL" not in html.upper():
                 raise ValueError("Unexpected product page")
             parser = OptionParser()
             parser.feed(html)
             if set(parser.options) != set(MEMBERS):
+                print("Parsed option labels:", repr(parser.labels), flush=True)
                 raise ValueError("Expected six member choices, found: " + repr(sorted(parser.options)))
             print("Rendered option labels (after JavaScript):")
             for member in MEMBERS:
@@ -153,5 +160,5 @@ if __name__ == "__main__":
     try:
         run()
     except Exception as exc:
-        print("::error::Monitor failed (" + type(exc).__name__ + "); previous stock state was not updated.")
+        print("::error::Monitor failed (" + type(exc).__name__ + "): " + str(exc)[:400] + "; previous stock state was not updated.", flush=True)
         raise SystemExit(1)
