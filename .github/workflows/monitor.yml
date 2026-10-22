@@ -1,4 +1,4 @@
-name: RIIZE magnetic doll restock alert
+name: RIIZE magnetic doll + baby key ring restock alert
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'One check, inspection, test email, or 12-check hourly watch'
+        description: 'Both products: inspect, test email, check, or 12-check hourly watch'
         type: choice
         default: inspect
         options:
@@ -19,7 +19,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: riize-magnetic-doll-monitor
+  group: riize-multi-product-monitor
   cancel-in-progress: false
 
 jobs:
@@ -34,7 +34,7 @@ jobs:
         run: |
           python3 -m pip install --disable-pip-version-check playwright==1.56.0
           python3 -m playwright install --with-deps chromium
-      - name: Check six members on a five-minute cadence
+      - name: Check two six-member products on a five-minute cadence
         env:
           RUN_MODE: ${{ github.event_name == 'schedule' && 'watch' || inputs.mode || 'inspect' }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
@@ -56,21 +56,29 @@ jobs:
           for ((i=1; i<=rounds; i++)); do
             started=$SECONDS
             echo "Inventory check $i/$rounds; mode=$mode"
-            if MODE="$mode" python3 monitor.py; then
-              if [[ "$mode" == "check" && -f stock-state.json ]]; then
-                git add stock-state.json
-                if ! git diff --cached --quiet; then
-                  if git commit -m 'Update magnetic doll stock status' && git push origin HEAD:main; then
-                    echo 'Stock state persisted.'
-                  else
-                    echo '::error::Unable to persist stock state.'
-                    failed=1
-                  fi
+            # A failure in one product must not prevent checking the other.
+            for script in monitor.py baby_riize_monitor.py; do
+              if MODE="$mode" python3 "$script"; then
+                echo "$script: completed"
+              else
+                echo "::warning::$script failed; its saved state was not updated."
+                failed=1
+              fi
+            done
+
+            if [[ "$mode" == "check" ]]; then
+              git add stock-state.json
+              if [[ -f baby-riize-state.json ]]; then
+                git add baby-riize-state.json
+              fi
+              if ! git diff --cached --quiet; then
+                if git commit -m 'Update RIIZE product inventory status' && git push origin HEAD:main; then
+                  echo 'Inventory states persisted.'
+                else
+                  echo '::error::Unable to persist inventory states.'
+                  failed=1
                 fi
               fi
-            else
-              echo '::warning::Inventory check failed; saved state unchanged. Continuing remaining checks.'
-              failed=1
             fi
 
             if (( i < rounds )); then
