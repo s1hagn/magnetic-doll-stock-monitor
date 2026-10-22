@@ -21,3 +21,18 @@ GitHub Actions 使用 `0 * * * *`：**目标每小时启动一轮，轮内检查
 - 在 Actions 中查看运行记录。没有补货邮件不代表任务一定正常。
 - 停止监控时禁用 workflow，并取消正在运行的任务。
 - 每小时一轮长任务，内部检查 12 次，避免每 5 分钟创建一条工作流记录；每轮上限为 65 分钟。没有自动续跑链。GitHub cron 可能延迟、跳过或在仓库长时间无活动后停用，请定期检查。\n- `concurrency` 防止多轮库存检查同时写入状态；若上一轮延迟而与下一轮重叠，仍可能排队，且 GitHub 只保留一个待运行的并发任务。
+
+
+## 新增：BABY RIIZE KEY RING（六人选项）
+
+同一个 workflow 现在也监控 [RIIZE 2025 WE LITTLE RIIZE – BABY RIIZE KEY RING](https://smtownandstore.com/product/pop-up-riize-2025-we-little-riize-baby-riize-key-ring/26236/category/57/display/1/) 的 SHOTARO、EUNSEOK、SUNGCHAN、WONBIN、SOHEE、ANTON 六人款。
+
+- `monitor.py` 和 `stock-state.json`：原有 MAGNETIC DOLL，保持独立。
+- `baby_riize_monitor.py` 和 `baby-riize-state.json`：新增钥匙扣，保持独立。
+- 同一轮依次执行两个监控；任意一款监控失败都不会跳过另一款。
+- 两款均使用已有 Gmail Secrets 和相同收件地址；邮件主题会注明商品名称。
+- 新商品首次成功运行发送启用邮件；其后只有首次发现可购买、或从售罄变有货才通知。
+- 若商品页面无法识别全部六个选项，或全部六个都没有明确售罄标识，会保守报错而不发送假补货提醒。这也意味着真正六款同时有货时需要人工检查日志。
+- 在 **Actions → RIIZE magnetic doll + baby key ring restock alert → Run workflow → inspect** 先检查两个商品的选项解析。inspect 不发邮件或写状态。之后用 `check` 正式初始化两款库存状态。
+- GitHub Actions 目标每小时启动一轮，每轮至多 12 次，轮次间隔目标 5 分钟；并非保证每 5 分钟必定执行。
+
