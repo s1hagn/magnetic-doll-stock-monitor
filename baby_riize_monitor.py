@@ -54,7 +54,8 @@ def fetch_stock():
             print("BABY RIIZE browser URL:", page.url, flush=True)
             page.wait_for_timeout(10000)
             html = page.content()
-            if "BABY RIIZE" not in html.upper() or "KEY RING" not in html.upper():
+            # Match the stable product ID in the final URL rather than a translated title.
+            if not re.search(r"/26236(?:/|$)", page.url):
                 raise ValueError("Unexpected BABY RIIZE product page")
             parser = BabyOptionParser()
             parser.feed(html)
