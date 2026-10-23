@@ -71,7 +71,8 @@ def fetch_stock():
             print("Number of frames:", len(page.frames), flush=True)
             print("Visible text excerpt:", repr(page.locator("body").inner_text(timeout=5000)[:650]), flush=True)
             html = page.content()
-            if "MAGNETIC DOLL" not in html.upper():
+            # Match the stable product ID in the final URL rather than a translated title.
+            if not re.search(r"/28247(?:/|$)", page.url):
                 raise ValueError("Unexpected product page")
             parser = OptionParser()
             parser.feed(html)
