@@ -10,7 +10,7 @@
 - `GMAIL_USER`：和之前 NMIXX 监控一样的 Gmail 发件邮箱。
 - `GMAIL_APP_PASSWORD`：同一 Gmail 的应用专用密码（不要提交到仓库，也不要在聊天里提供）。
 
-这是新仓库，GitHub Secrets **不会从 NMIXX 仓库自动复制**。收件邮箱已经在 workflow 中固定为 `siya2026z@gmail.com`。
+收件邮箱已经在 workflow 中固定为 `siya2026z@gmail.com`。
 
 GitHub Actions 使用 `0 * * * *`：**目标每小时启动一轮，轮内检查 12 次，每次间隔约 5 分钟**，共约 56 分钟。无需手动启动；也不使用自动续跑链。定时触发不保证准点，可能延迟或跳过。手动运行可选 `inspect`（只看库存）、`test-email`（测试 SMTP）、`check`（单次正式检查）、`watch`（完整 12 次连续检查）。通常不需要手动点 `watch`，以免与每小时的自动任务冲突。
 
