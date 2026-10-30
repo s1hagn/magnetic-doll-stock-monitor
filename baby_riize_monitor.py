@@ -2,11 +2,12 @@
 import json
 import os
 import re
+import time
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 from monitor import MEMBERS, SOLD_OUT, send_mail
 
 URL = "https://smtownandstore.com/product/pop-up-riize-2025-we-little-riize-baby-riize-key-ring/26236/category/57/display/1/"
@@ -49,7 +50,15 @@ def fetch_stock():
                 user_agent=("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
                             "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"),
             )
-            response = page.goto(URL, wait_until="domcontentloaded", timeout=45000)
+            for attempt in range(1, 3):
+                try:
+                    response = page.goto(URL, wait_until="domcontentloaded", timeout=45000)
+                    break
+                except PlaywrightTimeoutError:
+                    if attempt == 2:
+                        raise
+                    print("BABY RIIZE navigation timed out; retrying once in 3 seconds.", flush=True)
+                    time.sleep(3)
             print("BABY RIIZE browser status:", response.status if response else "none", flush=True)
             print("BABY RIIZE browser URL:", page.url, flush=True)
             page.wait_for_timeout(10000)
@@ -129,4 +138,4 @@ if __name__ == "__main__":
     except Exception as exc:
         print("::error::BABY RIIZE monitor failed (" + type(exc).__name__ +
               "): " + str(exc)[:400] + "; previous state not updated.", flush=True)
-        raise SystemExit(1)
+        raise SystemExit(2 if isinstance(exc, PlaywrightTimeoutError) else 1)
