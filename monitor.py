@@ -5,7 +5,7 @@ import re
 import smtplib
 import ssl
 import time
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from html.parser import HTMLParser
@@ -60,7 +60,15 @@ def fetch_stock():
                 user_agent=("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
                             "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"),
             )
-            response = page.goto(URL, wait_until="domcontentloaded", timeout=45000)
+            for attempt in range(1, 3):
+                try:
+                    response = page.goto(URL, wait_until="domcontentloaded", timeout=45000)
+                    break
+                except PlaywrightTimeoutError:
+                    if attempt == 2:
+                        raise
+                    print("Page navigation timed out; retrying once in 3 seconds.", flush=True)
+                    time.sleep(3)
             print("Browser response:", response.status if response else "none", flush=True)
             print("Browser URL:", page.url, flush=True)
             print("Page title:", page.title(), flush=True)
@@ -162,4 +170,4 @@ if __name__ == "__main__":
         run()
     except Exception as exc:
         print("::error::Monitor failed (" + type(exc).__name__ + "): " + str(exc)[:400] + "; previous stock state was not updated.", flush=True)
-        raise SystemExit(1)
+        raise SystemExit(2 if isinstance(exc, PlaywrightTimeoutError) else 1)
